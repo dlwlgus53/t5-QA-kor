@@ -3,6 +3,7 @@ import pdb
 import json
 import torch
 import pickle
+from utils import *
 from tqdm import tqdm
 import logging
 from log_conf import init_logger
@@ -108,11 +109,12 @@ if __name__ == '__main__':
     parser.add_argument('--max_length' ,  type = int, default=128)
     
     
+    
     args = parser.parse_args()
 
     args.data_path = './data/dev.json'
     from transformers import T5Tokenizer
-    args.tokenizer = T5Tokenizer.from_pretrained('t5-small')
+    args.tokenizer = T5Tokenizer.from_pretrained('KETI-AIR/ke-t5-base-ko')
     
     dataset = Dataset(args, args.data_path, 'train')
     loader = torch.utils.data.DataLoader(dataset=dataset, batch_size=16, collate_fn=dataset.collate_fn)

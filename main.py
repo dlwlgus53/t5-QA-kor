@@ -20,18 +20,17 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--max_length' ,  type = int, default=128)
 parser.add_argument('--do_train' ,  type = int, default=1)
 parser.add_argument('--do_short' ,  type = int, default=1)
-parser.add_argument('--dst_student_rate' ,  type = float, default=1.0)
+parser.add_argument('--do_test' ,  type = int, default=1)
 parser.add_argument('--seed' ,  type = int, default=1)
 parser.add_argument('--batch_size' , type = int, default=4)
 parser.add_argument('--test_batch_size' , type = int, default=16)
 parser.add_argument('--port' , type = int,  default = 12355)
 parser.add_argument('--max_epoch' ,  type = int, default=1)
-parser.add_argument('--base_trained', type = str, default = "google/t5-large-ssm-nq", help =" pretrainned model from 🤗")
+parser.add_argument('--base_trained', type = str, default = 'google/mt5-small', help =" pretrainned model from 🤗")
 parser.add_argument('--pretrained_model' , type = str,  help = 'pretrainned model')
-parser.add_argument('--debugging' , type = bool,  default = False, help = "Don't save file")
-parser.add_argument('--dev_path' ,  type = str,  default = '../woz-data/MultiWOZ_2.1/dev_data.json')
-parser.add_argument('--train_path' , type = str,  default = '../woz-data/MultiWOZ_2.1/train_data.json')
-parser.add_argument('--test_path' , type = str,  default = '../woz-data/MultiWOZ_2.1/test_data.json')
+parser.add_argument('--dev_path' ,  type = str,  default = './data/dev.json')
+parser.add_argument('--train_path' , type = str,  default = './data/train.json' )
+parser.add_argument('--test_path' , type = str,  default = './data/dev.json')
 parser.add_argument('--detail_log' , type = int,  default = 0)
 parser.add_argument('--save_prefix', type = str, help = 'prefix for all savings', default = '')
 parser.add_argument('-n', '--nodes', default=1,type=int, metavar='N')
@@ -89,16 +88,15 @@ def main_worker(gpu, args):
     logger.info("Trainning start")
     for epoch in range(args.max_epoch):
         if gpu==0: logger.info(f"Epoch : {epoch}")
-        train(args, gpu, model, train_loader, optimizer, train_dataset)
-        loss = valid(args, gpu, model, dev_loader, args.data_rate, val_dataset)
+        train(args, gpu, model, train_loader, optimizer)
+        loss = valid(args, gpu, model, dev_loader)
         logger.info("Epoch : %d,  Loss : %.04f" % (epoch, loss))
 
         if gpu == 0 and loss < min_loss:
             logger.info("New best")
             min_loss = loss
             best_performance['min_loss'] = min_loss.item()
-            if not args.debugging:
-                torch.save(model.state_dict(), f"model/woz{args.save_prefix}{args.data_rate}.pt")
+            torch.save(model.state_dict(), f"model/{args.save_prefix}QA.pt")
             logger.info("safely saved")
                 
     if gpu==0:            
@@ -108,8 +106,6 @@ def main_worker(gpu, args):
     
 def evaluate():
     test_dataset =Dataset(args, args.test_path, 'test')
-    
-    
     loader = torch.utils.data.DataLoader(
         dataset=test_dataset, batch_size=args.test_batch_size, pin_memory=True,
         num_workers=0, shuffle=False, collate_fn=test_dataset.collate_fn)
@@ -128,24 +124,8 @@ def evaluate():
     else:
         model = T5ForConditionalGeneration.from_pretrained(args.base_trained, return_dict=True).to('cuda:0')
         
-    joint_goal_acc, slot_acc, domain_acc, schema_acc, detail_wrong, loss = test(args, model, loader, test_dataset)
-    
-    logger.info(f'JGA : {joint_goal_acc} Slot Acc : {slot_acc} Loss : {loss}')
-    logger.info(f'domain_acc : {domain_acc}')
-    logger.info(f'schema_acc : {schema_acc}')
-    
-    schema_acc['JGA'] = joint_goal_acc
-    schema_acc['schema_acc'] = slot_acc
-    schema_acc.update(domain_acc)
-    schema_acc['loss'] = loss
-    
-    
-    utils.dict_to_csv(schema_acc, f'{args.save_prefix}{args.data_rate}.csv')
-    
-    if args.detail_log:
-        utils.dict_to_json(detail_wrong, f'{args.save_prefix}{args.data_rate}.json')
-    
-    
+    EM, F1 = test(args, model, loader)
+    logger.info(f"EM : {EM}, F1 : {F1}")
     
 def main():
     logger.info(args)
