@@ -3,6 +3,7 @@ model/
 runs/
 logs/
 out/
+model_etri/
 *.sh
 *.json
 *.csv
